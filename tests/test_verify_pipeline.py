@@ -1,33 +1,36 @@
 from __future__ import annotations
 
+import pytest
 import torch
 
 from app.application.use_cases.ingest_catalog import IngestCatalogUseCase
 from app.infrastructure.embedding_store import EmbeddingStore
 
 
-def test_catalog_ingestion(store, random_image, random_embedding):
+@pytest.mark.asyncio
+async def test_catalog_ingestion(store, random_image, random_embedding):
     from unittest.mock import MagicMock
 
     encoder = MagicMock()
     encoder.encode_image.return_value = random_embedding
     uc = IngestCatalogUseCase(encoder, store)
-    result = uc.execute("prod-001", random_image)
+    result = await uc.execute("prod-001", random_image)
     assert result["product_id"] == "prod-001"
     assert result["embedding_dims"] == 1024
     assert store.get("prod-001") is not None
 
 
-def test_catalog_reingestion_replaces(store, random_image, random_embedding):
+@pytest.mark.asyncio
+async def test_catalog_reingestion_replaces(store, random_image, random_embedding):
     from unittest.mock import MagicMock
 
     encoder = MagicMock()
     encoder.encode_image.return_value = random_embedding
     uc = IngestCatalogUseCase(encoder, store)
-    uc.execute("prod-001", random_image)
+    await uc.execute("prod-001", random_image)
     new_emb = torch.randn(1024)
     encoder.encode_image.return_value = new_emb
-    uc.execute("prod-001", random_image)
+    await uc.execute("prod-001", random_image)
     assert torch.equal(store.get("prod-001"), new_emb)
 
 
