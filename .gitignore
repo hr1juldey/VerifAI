@@ -16,3 +16,6 @@ verifai.log
 
 # Test fixture images (downloaded, not committed)
 tests/fixtures/images/
+
+# Evaluation output
+scripts/eval_results/
