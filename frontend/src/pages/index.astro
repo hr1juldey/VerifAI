@@ -1,0 +1,151 @@
+---
+import BaseLayout from '../layouts/Base.astro';
+---
+<BaseLayout>
+  <!-- Hero Section -->
+  <section class="min-h-[calc(100vh-3.5rem)] flex items-center justify-center relative overflow-hidden">
+    <!-- Subtle grid background -->
+    <div class="absolute inset-0 opacity-5" style="background-image: linear-gradient(var(--color-border) 1px, transparent 1px), linear-gradient(90deg, var(--color-border) 1px, transparent 1px); background-size: 60px 60px;"></div>
+
+    <div class="relative z-10 text-center max-w-4xl mx-auto px-4">
+      <h1 class="font-display text-[28px] sm:text-5xl lg:text-6xl 2xl:text-7xl font-bold tracking-tight text-text leading-[1.1]">
+        Catch return fraud.<br />
+        <span class="text-accent">In 1.8 seconds.</span>
+      </h1>
+      <p class="mt-4 sm:mt-6 text-base sm:text-lg text-muted max-w-xl mx-auto">
+        JEPA-powered visual verification for Indian e-commerce
+      </p>
+
+      <!-- CTA pair -->
+      <div class="mt-6 sm:mt-8 flex flex-col sm:flex-row gap-3 justify-center">
+        <a href="/demo" class="inline-flex items-center justify-center gap-2 bg-accent hover:bg-accent/90 text-bg px-6 py-3 rounded-lg font-semibold transition-colors">
+          <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20"><polygon points="5,3 19,10 5,17" /></svg>
+          Try it live
+        </a>
+        <a href="#early-access" class="inline-flex items-center justify-center border border-border hover:border-muted text-muted hover:text-text px-6 py-3 rounded-lg font-semibold transition-colors">
+          Get early access
+        </a>
+      </div>
+
+      <!-- Live verification preview placeholder -->
+      <div class="mt-10 sm:mt-14 mx-auto max-w-2xl">
+        <div class="rounded-xl border border-border bg-surface/50 p-6 sm:p-8">
+          <div class="flex items-center gap-2 mb-4">
+            <span class="w-2 h-2 rounded-full bg-accent animate-pulse"></span>
+            <span class="text-xs font-data text-muted">LIVE VERIFICATION PREVIEW</span>
+          </div>
+          <div class="grid grid-cols-2 gap-4">
+            <div class="rounded-lg bg-bg border border-border h-32 sm:h-40 flex items-center justify-center">
+              <span class="text-xs text-muted">Catalog Image</span>
+            </div>
+            <div class="rounded-lg bg-bg border border-border h-32 sm:h-40 flex items-center justify-center">
+              <span class="text-xs text-muted">Return Image</span>
+            </div>
+          </div>
+          <div class="mt-4 flex items-center justify-center gap-3">
+            <span class="px-3 py-1 rounded-full text-xs font-semibold bg-warning/20 text-warning border border-warning/30">SUSPECT</span>
+            <span class="font-data text-sm text-text">0.58</span>
+            <span class="text-xs text-muted">confidence</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Stats Bar -->
+  <section class="border-y border-border bg-surface/30">
+    <div class="max-w-5xl mx-auto px-4 py-6 sm:py-8 grid grid-cols-1 sm:grid-cols-3 gap-4 text-center">
+      <div>
+        <p class="font-data text-2xl sm:text-3xl font-bold text-text">10</p>
+        <p class="text-sm text-muted mt-1">images to deploy</p>
+      </div>
+      <div>
+        <p class="font-data text-2xl sm:text-3xl font-bold text-accent">1.8s</p>
+        <p class="text-sm text-muted mt-1">latency</p>
+      </div>
+      <div>
+        <p class="font-data text-2xl sm:text-3xl font-bold text-success">98.6%</p>
+        <p class="text-sm text-muted mt-1">accuracy</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- Pain Section -->
+  <section class="py-12 sm:py-20 px-4">
+    <div class="max-w-3xl mx-auto text-center">
+      <p class="font-display text-3xl sm:text-4xl 2xl:text-5xl font-bold text-text">
+        ₹1,000+ Crore
+      </p>
+      <p class="mt-3 text-lg text-muted">
+        lost to return fraud annually in Indian e-commerce
+      </p>
+      <div class="mt-8 grid grid-cols-1 sm:grid-cols-3 gap-4 text-left">
+        <div class="rounded-lg border border-border bg-surface p-4">
+          <p class="font-data text-xl text-danger">71%</p>
+          <p class="text-sm text-muted mt-1">of returns due to product mismatches</p>
+        </div>
+        <div class="rounded-lg border border-border bg-surface p-4">
+          <p class="font-data text-xl text-warning">₹500-1000</p>
+          <p class="text-sm text-muted mt-1">cost per return in reverse logistics</p>
+        </div>
+        <div class="rounded-lg border border-border bg-surface p-4">
+          <p class="font-data text-xl text-accent">40%+</p>
+          <p class="text-sm text-muted mt-1">return rates in fashion & electronics</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Tech Cred Section -->
+  <section class="py-12 sm:py-20 px-4 border-t border-border">
+    <div class="max-w-3xl mx-auto text-center">
+      <p class="text-sm font-data text-accent tracking-wider mb-4">TECHNOLOGY</p>
+      <p class="font-display text-2xl sm:text-3xl font-bold text-text">
+        Built with I-JEPA · ViT-H/14 · 632M parameters
+      </p>
+      <p class="mt-4 text-muted max-w-xl mx-auto">
+        Few-shot learning with 10-20 images to production. Semantic understanding that's robust to Indian warehouse chaos — lighting, angles, partial views. Runs on a ₹30K GPU, not ₹30L cloud infrastructure.
+      </p>
+      <div class="mt-8 flex flex-wrap justify-center gap-3">
+        <span class="px-3 py-1.5 rounded-full text-xs border border-border bg-surface text-muted">I-JEPA Encoder</span>
+        <span class="px-3 py-1.5 rounded-full text-xs border border-border bg-surface text-muted">Spatial Diff Analysis</span>
+        <span class="px-3 py-1.5 rounded-full text-xs border border-border bg-surface text-muted">Gemma 4 VLM</span>
+        <span class="px-3 py-1.5 rounded-full text-xs border border-border bg-surface text-muted">Edge-First Architecture</span>
+        <span class="px-3 py-1.5 rounded-full text-xs border border-border bg-surface text-muted">Federated Learning</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- Early Access / CTA Section -->
+  <section id="early-access" class="py-12 sm:py-20 px-4 border-t border-border">
+    <div class="max-w-md mx-auto text-center">
+      <h2 class="font-display text-2xl sm:text-3xl font-bold text-text">Get early access</h2>
+      <p class="mt-2 text-muted">Coming soon — leave your details and we'll reach out.</p>
+      <div class="mt-6 flex flex-col gap-3">
+        <input type="text" placeholder="Your name" class="w-full px-4 py-3 rounded-lg bg-surface border border-border text-text placeholder-muted/50 focus:outline-none focus:border-accent transition-colors" />
+        <input type="email" placeholder="Email address" class="w-full px-4 py-3 rounded-lg bg-surface border border-border text-text placeholder-muted/50 focus:outline-none focus:border-accent transition-colors" />
+        <select class="w-full px-4 py-3 rounded-lg bg-surface border border-border text-muted focus:outline-none focus:border-accent transition-colors">
+          <option value="">Company type</option>
+          <option value="d2c">D2C Brand</option>
+          <option value="3pl">3PL / Logistics</option>
+          <option value="marketplace">Marketplace Seller</option>
+          <option value="other">Other</option>
+        </select>
+        <button class="w-full bg-accent hover:bg-accent/90 text-bg py-3 rounded-lg font-semibold transition-colors">
+          Join waitlist
+        </button>
+      </div>
+      <p class="mt-4 text-sm text-muted">
+        Or <a href="#" class="text-accent hover:underline">talk to the founder</a> directly.
+      </p>
+    </div>
+  </section>
+
+  <!-- Footer -->
+  <footer class="border-t border-border py-6 px-4">
+    <div class="max-w-5xl mx-auto flex flex-col sm:flex-row justify-between items-center gap-2">
+      <span class="text-sm text-muted">VerifAI · JEPA-Powered Visual Verification</span>
+      <span class="text-xs text-muted/50">Built for Indian e-commerce</span>
+    </div>
+  </footer>
+</BaseLayout>

@@ -1,0 +1,66 @@
+---
+import '../styles/global.css';
+
+interface Props {
+  title?: string;
+}
+
+const { title = 'VerifAI — JEPA-Powered Visual Verification' } = Astro.props;
+---
+
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="description" content="Catch return fraud in 1.8 seconds. JEPA-powered visual verification for Indian e-commerce." />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <title>{title}</title>
+  </head>
+  <body class="min-h-screen bg-bg text-text antialiased">
+    <nav class="fixed top-0 left-0 right-0 z-40 bg-bg/80 backdrop-blur-md border-b border-border">
+      <div class="max-w-7xl mx-auto px-4 lg:px-8 h-14 flex items-center justify-between">
+        <a href="/" class="flex items-center gap-2 text-text hover:text-accent transition-colors">
+          <span class="text-lg font-bold font-display tracking-tight">VerifAI</span>
+        </a>
+
+        <!-- Desktop nav -->
+        <div class="hidden lg:flex items-center gap-6">
+          <a href="/demo" class="text-sm text-muted hover:text-text transition-colors">Demo</a>
+          <a href="/demo" class="text-sm bg-accent hover:bg-accent/90 text-bg px-4 py-1.5 rounded-lg font-medium transition-colors">Try it live</a>
+        </div>
+
+        <!-- Mobile hamburger -->
+        <button
+          id="mobile-menu-btn"
+          class="lg:hidden text-muted hover:text-text p-1"
+          aria-label="Toggle menu"
+        >
+          <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16" />
+          </svg>
+        </button>
+      </div>
+
+      <!-- Mobile menu -->
+      <div id="mobile-menu" class="hidden lg:hidden border-t border-border bg-bg/95 backdrop-blur-md">
+        <div class="px-4 py-3 flex flex-col gap-2">
+          <a href="/demo" class="text-sm text-muted hover:text-text py-2 transition-colors">Demo</a>
+          <a href="/demo" class="text-sm bg-accent text-bg px-4 py-2 rounded-lg font-medium text-center">Try it live</a>
+        </div>
+      </div>
+    </nav>
+
+    <main class="pt-14">
+      <slot />
+    </main>
+
+    <script>
+      const btn = document.getElementById('mobile-menu-btn');
+      const menu = document.getElementById('mobile-menu');
+      btn?.addEventListener('click', () => {
+        menu?.classList.toggle('hidden');
+      });
+    </script>
+  </body>
+</html>
