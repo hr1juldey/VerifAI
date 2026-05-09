@@ -277,12 +277,13 @@ def evaluate_pair(
         return result
 
     # ── Clean MATCH ──────────────────────────────────────────
-    # Still check if borderline
+    # Only borderline if there are flagged regions for Gemma to analyze
     gap = score - product_threshold
-    if gap < BORDERLINE_MARGIN:
+    if gap < BORDERLINE_MARGIN and contiguous_regions >= 1:
         result["is_borderline"] = True
         result["borderline_reason"] = (
-            f"clean MATCH but score only {gap:.4f} above threshold"
+            f"clean MATCH but score only {gap:.4f} above threshold, "
+            f"with {contiguous_regions} flagged region(s)"
         )
     return result
 
