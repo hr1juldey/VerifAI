@@ -10,15 +10,17 @@ from app.domain.value_objects import ImageData
 
 logger = logging.getLogger(__name__)
 
-MODEL_ID = "facebook/ijepa_vith14_22k"
-
 
 class IjepaEncoder(EncoderPort):
-    def __init__(self, device: str = "cuda") -> None:
+    def __init__(
+        self, device: str = "cuda", model_id: str = "facebook/ijepa_vith14_22k"
+    ) -> None:
         self._device = device
         device_id = 0 if (device == "cuda" and torch.cuda.is_available()) else -1
         self._pipe = pipeline(
-            "image-feature-extraction", model=MODEL_ID, device=device_id,
+            "image-feature-extraction",
+            model=model_id,
+            device=device_id,
         )
         self._model = self._pipe.model
         self._processor = self._pipe.image_processor

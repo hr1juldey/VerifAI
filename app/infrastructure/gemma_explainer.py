@@ -10,9 +10,6 @@ from app.application.ports import ExplainerPort
 
 logger = logging.getLogger(__name__)
 
-OLLAMA_MODEL = "ollama_chat/gemma4:e4b"
-OLLAMA_BASE = "http://localhost:11434"
-
 
 class ExplainRejection(dspy.Signature):
     catalog_image: DspyImage = dspy.InputField(
@@ -31,18 +28,24 @@ class ExplainRejection(dspy.Signature):
 
 
 class GemmaExplainer(ExplainerPort):
-    def __init__(self) -> None:
+    def __init__(
+        self,
+        model: str = "ollama_chat/gemma4:e4b",
+        base_url: str = "http://localhost:11434",
+        temperature: float = 0.3,
+        max_retries: int = 3,
+    ) -> None:
         lm = dspy.LM(
-            model=OLLAMA_MODEL,
-            api_base=OLLAMA_BASE,
+            model=model,
+            api_base=base_url,
             api_key="",
             cache=False,
-            temperature=0.3,
-            num_retries=3,
+            temperature=temperature,
+            num_retries=max_retries,
         )
         dspy.configure(lm=lm)
         self._predictor = dspy.Predict(ExplainRejection)
-        logger.info("DSPy explainer initialized with %s", OLLAMA_MODEL)
+        logger.info("DSPy explainer initialized with %s", model)
 
     async def explain(
         self,

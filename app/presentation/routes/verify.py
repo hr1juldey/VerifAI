@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import os
 
 from fastapi import APIRouter, File, Form, Request, UploadFile
 from PIL import Image
@@ -9,7 +10,7 @@ from app.presentation.schemas import ErrorResponse, VerifyResponse
 
 router = APIRouter(tags=["verify"])
 
-_semaphore = asyncio.Semaphore(2)
+_semaphore = asyncio.Semaphore(int(os.environ.get("GPU_CONCURRENCY", "2")))
 
 
 @router.post(
