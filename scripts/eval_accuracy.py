@@ -835,6 +835,15 @@ def main() -> None:
     borderline = [r for r in results if r["is_borderline"]]
     logger.info("Identified %d borderline cases", len(borderline))
 
+    # ── Unload I-JEPA from GPU to free VRAM for Gemma ───────
+    logger.info("Unloading I-JEPA from GPU to free VRAM for Gemma...")
+    del encoder
+    # Tokens are already on CPU — only the model held GPU memory
+    if torch.cuda.is_available():
+        torch.cuda.empty_cache()
+        free_vram = torch.cuda.mem_get_info()[0] / (1024**3)
+        logger.info("I-JEPA unloaded. Free VRAM: %.1f GB", free_vram)
+
     # ── Phase D: Real Gemma calls ────────────────────────────
     gemma_results: list[dict] = []
     if borderline:
