@@ -5,7 +5,7 @@ Phases:
   A — Encode all 40 fixture images (pooled + tokens + CLAHE + baselines)
   B — Pairwise evaluation with replicated decision logic (no Gemma calls)
   C — Metrics: confusion matrix, per-category, ROC curve, hard cases
-  D — Save JSON results + print summary
+  D — Real DSPy/Gemma calls on borderline cases + structured report
 
 Usage:
     cd repo && uv run python scripts/eval_accuracy.py
@@ -13,6 +13,7 @@ Usage:
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import sys
@@ -21,6 +22,7 @@ from collections import defaultdict
 from itertools import combinations
 from pathlib import Path
 
+import cv2
 import numpy as np
 import torch
 from torch.nn.functional import cosine_similarity
@@ -46,6 +48,9 @@ DEFAULT_THRESHOLD = 0.7
 DEFAULT_REGIONAL_THRESHOLD = 0.25
 DEFAULT_DELTA_THRESHOLD = 0.15
 HEATMAP_GRID = 16
+
+# Borderline = score within this margin of the per-product threshold
+BORDERLINE_MARGIN = 0.05
 
 
 # ================================================================
@@ -115,6 +120,7 @@ def encode_all_images(
             "category": meta["category"],
             "brand": meta["brand"],
             "product_title": meta["product_title"],
+            "image": img,  # keep PIL image for Phase D overlay rendering
         }
 
         if (idx + 1) % 10 == 0 or idx == total - 1:
@@ -133,7 +139,6 @@ def _compute_regional_stats(
     tokens_b: torch.Tensor,
     regional_threshold: float,
 ) -> tuple[np.ndarray, int, int]:
-    """Replicate ``SpatialDiff.compute_regional_stats``."""
     sims = cosine_similarity(tokens_a, tokens_b, dim=-1)
     diff_scores = 1.0 - sims.numpy()
     heatmap = diff_scores.reshape(HEATMAP_GRID, HEATMAP_GRID)
@@ -148,7 +153,6 @@ def _compute_patch_deltas(
     norm_tokens: torch.Tensor,
     catalog_tokens: torch.Tensor,
 ) -> np.ndarray:
-    """Replicate ``compute_patch_deltas``."""
     raw_sims = cosine_similarity(raw_tokens, catalog_tokens, dim=-1)
     norm_sims = cosine_similarity(norm_tokens, catalog_tokens, dim=-1)
     deltas = (norm_sims - raw_sims).numpy()
@@ -183,7 +187,12 @@ def evaluate_pair(
     return_id: str,
     encoded: dict[str, dict],
 ) -> dict:
-    """Evaluate a single pair using pre-computed embeddings (no LLM)."""
+    """Evaluate a single pair using pre-computed embeddings (no LLM).
+
+    ``is_borderline`` is True only when the score is within
+    ``BORDERLINE_MARGIN`` of the per-product threshold, OR when the
+    SUSPECT delta falls in the ambiguous zone.
+    """
     cat = encoded[catalog_id]
     ret = encoded[return_id]
 
@@ -205,9 +214,11 @@ def evaluate_pair(
         "catalog_brand": cat["brand"],
         "return_brand": ret["brand"],
         "score": round(score, 6),
+        "product_threshold": round(product_threshold, 4),
         "decision": "MATCH",
         "suspect_reason": None,
-        "would_call_llm": False,
+        "is_borderline": False,
+        "borderline_reason": None,
         "contiguous_regions": 0,
         "flagged_count": 0,
         "max_delta": None,
@@ -216,7 +227,13 @@ def evaluate_pair(
     # ── REJECT path (low similarity) ─────────────────────────
     if score < product_threshold:
         result["decision"] = "REJECT"
-        result["would_call_llm"] = True
+        # Borderline: score is close to threshold (just barely rejected)
+        gap = product_threshold - score
+        if gap < BORDERLINE_MARGIN:
+            result["is_borderline"] = True
+            result["borderline_reason"] = (
+                f"score {score:.4f} is only {gap:.4f} below threshold {product_threshold:.4f}"
+            )
         return result
 
     # ── Spatial diff check ───────────────────────────────────
@@ -237,17 +254,41 @@ def evaluate_pair(
         if max_delta > delta_threshold:
             result["decision"] = "MATCH"
             result["suspect_reason"] = "LIGHTING_ARTIFACT"
+            # Borderline if score is close to threshold
+            gap = score - product_threshold
+            if gap < BORDERLINE_MARGIN:
+                result["is_borderline"] = True
+                result["borderline_reason"] = (
+                    f"MATCH via LIGHTING_ARTIFACT but score only {gap:.4f} above threshold"
+                )
         elif max_delta < delta_threshold * 0.33:
             result["decision"] = "REJECT"
             result["suspect_reason"] = "CONTENT_DIFF"
-            result["would_call_llm"] = True
+            # Borderline: score barely passed but content differs
+            gap = score - product_threshold
+            if gap < BORDERLINE_MARGIN:
+                result["is_borderline"] = True
+                result["borderline_reason"] = (
+                    f"score passed threshold by only {gap:.4f}, but CONTENT_DIFF confirmed"
+                )
         else:
-            # Ambiguous → would ask Gemma
+            # Ambiguous zone — THIS is the primary LLM trigger
             result["decision"] = "SUSPECT"
-            result["would_call_llm"] = True
+            result["is_borderline"] = True
+            result["borderline_reason"] = (
+                f"SUSPECT ambiguous: max_delta {max_delta:.4f} in "
+                f"[{delta_threshold * 0.33:.4f}, {delta_threshold:.4f}]"
+            )
         return result
 
     # ── Clean MATCH ──────────────────────────────────────────
+    # Still check if borderline
+    gap = score - product_threshold
+    if gap < BORDERLINE_MARGIN:
+        result["is_borderline"] = True
+        result["borderline_reason"] = (
+            f"clean MATCH but score only {gap:.4f} above threshold"
+        )
     return result
 
 
@@ -259,11 +300,6 @@ def evaluate_pair(
 def generate_pairs(
     encoded: dict[str, dict],
 ) -> list[tuple[str, str, str]]:
-    """Generate test pairs tagged by type.
-
-    Returns list of ``(catalog_id, return_id, pair_type)`` where
-    *pair_type* is ``genuine``, ``same_category``, or ``cross_category``.
-    """
     by_category: dict[str, list[str]] = defaultdict(list)
     for image_id, meta in encoded.items():
         by_category[meta["category"]].append(image_id)
@@ -271,18 +307,15 @@ def generate_pairs(
     categories = sorted(by_category.keys())
     pairs: list[tuple[str, str, str]] = []
 
-    # 1) Genuine — each image vs itself → expect MATCH
     for image_id in sorted(encoded.keys()):
         pairs.append((image_id, image_id, "genuine"))
 
-    # 2) Same-category — different images, same category
     for cat in categories:
         ids = sorted(by_category[cat])
         for i in range(len(ids)):
             for j in range(i + 1, len(ids)):
                 pairs.append((ids[i], ids[j], "same_category"))
 
-    # 3) Cross-category — different categories → expect REJECT
     for c1, c2 in combinations(categories, 2):
         for id1 in sorted(by_category[c1]):
             for id2 in sorted(by_category[c2]):
@@ -304,7 +337,6 @@ def generate_pairs(
 
 
 def _tag_expected(results: list[dict]) -> None:
-    """Set ``expected`` field on each result for metrics."""
     for r in results:
         ptype = r["pair_type"]
         if ptype == "genuine":
@@ -312,8 +344,6 @@ def _tag_expected(results: list[dict]) -> None:
         elif ptype == "cross_category":
             r["expected"] = "REJECT"
         else:
-            # same_category — mark as MATCH expected (same garment type)
-            # but flag counterfeit if brands differ
             r["expected"] = "MATCH"
             r["is_counterfeit"] = r["catalog_brand"] != r["return_brand"]
 
@@ -321,7 +351,6 @@ def _tag_expected(results: list[dict]) -> None:
 def compute_metrics(results: list[dict]) -> dict:
     _tag_expected(results)
 
-    # ── Overall confusion matrix (genuine + cross_category only) ──
     clear = [r for r in results if r["pair_type"] in ("genuine", "cross_category")]
     tp = sum(1 for r in clear if r["expected"] == "MATCH" and r["decision"] == "MATCH")
     tn = sum(1 for r in clear if r["expected"] == "REJECT" and r["decision"] == "REJECT")
@@ -333,9 +362,8 @@ def compute_metrics(results: list[dict]) -> dict:
     recall = tp / (tp + fn) if (tp + fn) else 0.0
     f1 = 2 * precision * recall / (precision + recall) if (precision + recall) else 0.0
 
-    llm_calls = sum(1 for r in results if r["would_call_llm"])
+    borderline_count = sum(1 for r in results if r["is_borderline"])
 
-    # ── Per-category metrics ──────────────────────────────────
     categories = sorted({r["catalog_category"] for r in results})
     per_category: dict[str, dict] = {}
     for cat in categories:
@@ -351,7 +379,6 @@ def compute_metrics(results: list[dict]) -> dict:
             "accuracy": round((ctp + ctn) / ct, 4) if ct else 0.0,
         }
 
-    # ── By pair type stats ────────────────────────────────────
     by_type: dict[str, dict] = {}
     for ptype in ("genuine", "same_category", "cross_category"):
         tr = [r for r in results if r["pair_type"] == ptype]
@@ -367,11 +394,10 @@ def compute_metrics(results: list[dict]) -> dict:
             "min_score": round(min(scores), 4),
             "max_score": round(max(scores), 4),
             "std_score": round(float(np.std(scores)), 4),
-            "llm_calls": sum(1 for r in tr if r["would_call_llm"]),
+            "borderline_count": sum(1 for r in tr if r["is_borderline"]),
             "decisions": dict(decisions),
         }
 
-    # ── Counterfeit vs same-brand within same_category ───────
     same_cat = [r for r in results if r["pair_type"] == "same_category"]
     counterfeit = [r for r in same_cat if r.get("is_counterfeit")]
     same_brand = [r for r in same_cat if not r.get("is_counterfeit")]
@@ -389,10 +415,10 @@ def compute_metrics(results: list[dict]) -> dict:
             "min_score": round(min(scores), 4),
             "max_score": round(max(scores), 4),
             "std_score": round(float(np.std(scores)), 4),
+            "borderline_count": sum(1 for r in subset if r["is_borderline"]),
             "decisions": dict(decisions),
         }
 
-    # ── ROC curve: sweep threshold over cosine scores ─────────
     roc_data: list[dict] = []
     for t_100 in range(50, 100, 5):
         t = t_100 / 100.0
@@ -412,20 +438,13 @@ def compute_metrics(results: list[dict]) -> dict:
             "fpr": round(fpr_t, 4),
         })
 
-    # ── Hard cases: closest to decision boundary ──────────────
     hard_cases: list[dict] = []
     genuine_res = sorted(
         [r for r in results if r["pair_type"] == "genuine"],
         key=lambda r: r["score"],
     )
     hard_cases.extend([
-        {
-            "kind": "genuine_lowest",
-            "catalog_id": r["catalog_id"],
-            "return_id": r["return_id"],
-            "score": r["score"],
-            "decision": r["decision"],
-        }
+        {"kind": "genuine_lowest", **{k: r[k] for k in ("catalog_id", "return_id", "score", "decision")}}
         for r in genuine_res[:5]
     ])
     cross_res = sorted(
@@ -433,17 +452,10 @@ def compute_metrics(results: list[dict]) -> dict:
         key=lambda r: -r["score"],
     )
     hard_cases.extend([
-        {
-            "kind": "cross_highest",
-            "catalog_id": r["catalog_id"],
-            "return_id": r["return_id"],
-            "score": r["score"],
-            "decision": r["decision"],
-        }
+        {"kind": "cross_highest", **{k: r[k] for k in ("catalog_id", "return_id", "score", "decision")}}
         for r in cross_res[:5]
     ])
 
-    # ── False positives / negatives detail ────────────────────
     false_positives = [
         {"catalog_id": r["catalog_id"], "return_id": r["return_id"],
          "score": r["score"], "pair_type": r["pair_type"]}
@@ -466,8 +478,8 @@ def compute_metrics(results: list[dict]) -> dict:
             "precision": round(precision, 4),
             "recall": round(recall, 4),
             "f1": round(f1, 4),
-            "llm_call_rate": round(llm_calls / len(results), 4) if results else 0.0,
-            "llm_calls": llm_calls,
+            "borderline_count": borderline_count,
+            "borderline_rate": round(borderline_count / len(results), 4) if results else 0.0,
         },
         "per_category": per_category,
         "by_pair_type": by_type,
@@ -481,11 +493,226 @@ def compute_metrics(results: list[dict]) -> dict:
 
 
 # ================================================================
-# Pretty-print
+# Phase D: Real Gemma calls on borderline cases
 # ================================================================
 
 
-def print_summary(metrics: dict) -> None:
+def _render_overlay(
+    return_img,
+    catalog_tokens: torch.Tensor,
+    return_tokens: torch.Tensor,
+    regional_threshold: float,
+) -> np.ndarray:
+    """Render spatial diff overlay on return image using SpatialDiff."""
+    from app.infrastructure.spatial_diff import SpatialDiff
+    spatial = SpatialDiff()
+    diff_map = spatial.compute_diff(catalog_tokens, return_tokens)
+    result = spatial.render_overlay(return_img, diff_map)
+    return result.annotated_image
+
+
+async def run_gemma_on_borderline(
+    borderline: list[dict],
+    encoded: dict[str, dict],
+) -> list[dict]:
+    """Run real DSPy/Gemma on each borderline case. Returns enriched results."""
+    import tempfile
+
+    from app.infrastructure.gemma_explainer import GemmaExplainer
+
+    logger.info("Initializing Gemma explainer (DSPy + Ollama)...")
+    explainer = GemmaExplainer()
+
+    gemma_results: list[dict] = []
+
+    for idx, case in enumerate(borderline):
+        cat_id = case["catalog_id"]
+        ret_id = case["return_id"]
+        cat = encoded[cat_id]
+        ret = encoded[ret_id]
+
+        # Render spatial diff overlay on return image
+        baseline = cat["baseline"]
+        overlay = _render_overlay(
+            ret["image"],
+            cat["tokens"],
+            ret["tokens"],
+            baseline.regional_threshold,
+        )
+
+        # Write temp images for Gemma
+        with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as cat_f, \
+             tempfile.NamedTemporaryFile(suffix=".png", delete=False) as ret_f:
+            cat_img_np = np.array(cat["image"])
+            cv2.imwrite(cat_f.name, cv2.cvtColor(cat_img_np, cv2.COLOR_RGB2BGR))
+            cv2.imwrite(ret_f.name, overlay)
+
+            description = (
+                f"{cat['product_title']} (brand: {cat['brand']}) "
+                f"vs {ret['product_title']} (brand: {ret['brand']})"
+            )
+
+            t0 = time.perf_counter()
+            try:
+                verdict, explanation = await explainer.explain(
+                    cat_f.name, ret_f.name, description,
+                )
+                latency = (time.perf_counter() - t0) * 1000
+                logger.info(
+                    "  [%d/%d] %s vs %s → %s (%.0fms)",
+                    idx + 1, len(borderline), cat_id, ret_id, verdict, latency,
+                )
+            except Exception as e:
+                verdict = "ERROR"
+                explanation = f"Gemma call failed: {e}"
+                latency = (time.perf_counter() - t0) * 1000
+                logger.error("  [%d/%d] %s vs %s → FAILED: %s", idx + 1, len(borderline), cat_id, ret_id, e)
+
+        # Determine final decision after LLM input
+        if verdict == "LIGHTING_ARTIFACT":
+            final_decision = "MATCH"
+        elif verdict == "CONTENT_DIFF":
+            final_decision = "REJECT"
+        else:
+            final_decision = case["decision"]  # keep original
+
+        decision_changed = final_decision != case["decision"]
+
+        gemma_results.append({
+            **case,
+            "gemma_verdict": verdict,
+            "gemma_explanation": explanation,
+            "gemma_latency_ms": round(latency, 1),
+            "decision_before_llm": case["decision"],
+            "decision_after_llm": final_decision,
+            "decision_changed": decision_changed,
+            "product_description": description,
+        })
+
+    return gemma_results
+
+
+def generate_report(
+    metrics: dict,
+    gemma_results: list[dict],
+    all_results: list[dict],
+) -> str:
+    """Generate structured markdown report."""
+    lines: list[str] = []
+    w = 78
+
+    def _div(char: str = "-") -> str:
+        return char * w
+
+    # ── Header ───────────────────────────────────────────────
+    lines.append(f"# VerifAI Evaluation Report\n")
+    lines.append(f"Generated: {time.strftime('%Y-%m-%d %H:%M:%S')}")
+    lines.append(f"Total pairs: {metrics['overall']['total_pairs']}")
+    lines.append("")
+
+    # ── Overall ──────────────────────────────────────────────
+    o = metrics["overall"]
+    lines.append("## 1. Overall Accuracy\n")
+    lines.append(f"| Metric | Value |")
+    lines.append(f"|--------|-------|")
+    lines.append(f"| Accuracy | **{o['accuracy']:.2%}** |")
+    lines.append(f"| Precision | {o['precision']:.2%} |")
+    lines.append(f"| Recall | {o['recall']:.2%} |")
+    lines.append(f"| F1 Score | {o['f1']:.2%} |")
+    lines.append(f"| Borderline cases | {o['borderline_count']} ({o['borderline_rate']:.2%}) |")
+    lines.append("")
+
+    # ── Confusion matrix ─────────────────────────────────────
+    lines.append("## 2. Confusion Matrix\n")
+    lines.append(f"| | Predicted MATCH | Predicted REJECT |")
+    lines.append(f"|---|---|---|")
+    lines.append(f"| **Actual MATCH** | TP: {o['tp']} | FN: {o['fn']} |")
+    lines.append(f"| **Actual REJECT** | FP: {o['fp']} | TN: {o['tn']} |")
+    lines.append("")
+
+    # ── By pair type ─────────────────────────────────────────
+    lines.append("## 3. By Pair Type\n")
+    lines.append(f"| Type | Count | Avg Score | Std | Range | Borderline | Decisions |")
+    lines.append(f"|------|-------|-----------|-----|-------|------------|-----------|")
+    for ptype, data in metrics["by_pair_type"].items():
+        lines.append(
+            f"| {ptype} | {data['total']} | {data['avg_score']:.4f} | "
+            f"{data['std_score']:.4f} | [{data['min_score']:.4f}, {data['max_score']:.4f}] | "
+            f"{data['borderline_count']} | {data['decisions']} |"
+        )
+    lines.append("")
+
+    # ── Counterfeit analysis ─────────────────────────────────
+    ca = metrics.get("counterfeit_analysis") or {}
+    if ca:
+        lines.append("## 4. Counterfeit Analysis (diff brand, same category)\n")
+        lines.append(f"- **Pairs**: {ca['total']}")
+        lines.append(f"- **Avg score**: {ca['avg_score']:.4f}")
+        lines.append(f"- **Range**: [{ca['min_score']:.4f}, {ca['max_score']:.4f}]")
+        lines.append(f"- **Borderline**: {ca.get('borderline_count', 'N/A')}")
+        lines.append(f"- **Decisions**: {ca['decisions']}")
+        lines.append("")
+
+    # ── Threshold sweep ──────────────────────────────────────
+    lines.append("## 5. Threshold Sweep\n")
+    lines.append(f"| Threshold | Accuracy | Precision | Recall | FPR |")
+    lines.append(f"|-----------|----------|-----------|--------|-----|")
+    best = max(metrics["roc_data"], key=lambda x: x["accuracy"])
+    for pt in metrics["roc_data"]:
+        marker = " **best**" if pt["threshold"] == best["threshold"] else ""
+        lines.append(
+            f"| {pt['threshold']:.2f}{marker} | {pt['accuracy']:.2%} | "
+            f"{pt['precision']:.2%} | {pt['recall']:.2%} | {pt['fpr']:.2%} |"
+        )
+    lines.append("")
+
+    # ── Gemma borderline report ──────────────────────────────
+    lines.append("## 6. Borderline Cases — Real Gemma Analysis\n")
+    if not gemma_results:
+        lines.append("*No borderline cases identified.*\n")
+    else:
+        changed = [r for r in gemma_results if r["decision_changed"]]
+        lines.append(f"**{len(gemma_results)} borderline cases** evaluated with real Gemma.  ")
+        lines.append(f"**{len(changed)} decisions changed** after LLM analysis.\n")
+
+        for i, gr in enumerate(gemma_results, 1):
+            lines.append(f"### Case {i}: `{gr['catalog_id']}` vs `{gr['return_id']}`\n")
+            lines.append(f"| Field | Value |")
+            lines.append(f"|-------|-------|")
+            lines.append(f"| Pair type | {gr['pair_type']} |")
+            if gr.get("is_counterfeit"):
+                lines.append(f"| Counterfeit | Yes (different brands) |")
+            lines.append(f"| Cosine score | {gr['score']:.4f} |")
+            lines.append(f"| Product threshold | {gr['product_threshold']:.4f} |")
+            lines.append(f"| Gap from threshold | {abs(gr['score'] - gr['product_threshold']):.4f} |")
+            lines.append(f"| Contiguous regions | {gr['contiguous_regions']} |")
+            if gr["max_delta"] is not None:
+                lines.append(f"| Max delta | {gr['max_delta']:.4f} |")
+            lines.append(f"| Borderline reason | {gr['borderline_reason']} |")
+            lines.append(f"| Decision before LLM | **{gr['decision_before_llm']}** |")
+            lines.append(f"| Gemma verdict | **{gr['gemma_verdict']}** |")
+            lines.append(f"| Decision after LLM | **{gr['decision_after_llm']}** |")
+            lines.append(f"| Decision changed | **{'YES' if gr['decision_changed'] else 'no'}** |")
+            lines.append(f"| Gemma latency | {gr['gemma_latency_ms']:.0f}ms |")
+            lines.append(f"| Product | {gr['product_description']} |")
+            lines.append(f"\n> **Gemma explanation**: {gr['gemma_explanation']}\n")
+
+    # ── Hard cases ───────────────────────────────────────────
+    lines.append("## 7. Hard Cases (nearest to boundary)\n")
+    for hc in metrics.get("hard_cases", []):
+        lines.append(f"- `[{hc['kind']}]` {hc['catalog_id']} vs {hc['return_id']}  "
+                      f"score={hc['score']:.4f} → {hc['decision']}")
+    lines.append("")
+
+    return "\n".join(lines)
+
+
+# ================================================================
+# Pretty-print (console)
+# ================================================================
+
+
+def print_summary(metrics: dict, gemma_results: list[dict]) -> None:
     o = metrics["overall"]
     w = 72
 
@@ -495,12 +722,12 @@ def print_summary(metrics: dict) -> None:
 
     print(f"\n{'Overall Metrics':^{w}}")
     print("-" * w)
-    print(f"  Total pairs evaluated: {o['evaluated_pairs']} (of {o['total_pairs']} total)")
-    print(f"  Accuracy:              {o['accuracy']:.2%}")
-    print(f"  Precision:             {o['precision']:.2%}")
-    print(f"  Recall:                {o['recall']:.2%}")
-    print(f"  F1 Score:              {o['f1']:.2%}")
-    print(f"  LLM call rate:         {o['llm_call_rate']:.2%}  ({o['llm_calls']}/{o['total_pairs']})")
+    print(f"  Total pairs:          {o['total_pairs']}")
+    print(f"  Accuracy:             {o['accuracy']:.2%}")
+    print(f"  Precision:            {o['precision']:.2%}")
+    print(f"  Recall:               {o['recall']:.2%}")
+    print(f"  F1 Score:             {o['f1']:.2%}")
+    print(f"  Borderline cases:     {o['borderline_count']} ({o['borderline_rate']:.2%})")
 
     print(f"\n{'Confusion Matrix':^{w}}")
     print("-" * w)
@@ -509,39 +736,23 @@ def print_summary(metrics: dict) -> None:
     print(f"  FP (wrong MATCH)   :  {o['fp']:>5}")
     print(f"  FN (wrong REJECT)  :  {o['fn']:>5}")
 
-    print(f"\n{'Per-Category Accuracy':^{w}}")
-    print("-" * w)
-    hdr = f"  {'Category':<12} {'Pairs':>6} {'TP':>5} {'TN':>5} {'FP':>5} {'FN':>5} {'Accuracy':>10}"
-    print(hdr)
-    for cat, cm in sorted(metrics["per_category"].items()):
-        print(f"  {cat:<12} {cm['total_pairs']:>6} {cm['tp']:>5} {cm['tn']:>5} "
-              f"{cm['fp']:>5} {cm['fn']:>5} {cm['accuracy']:>9.2%}")
-
     print(f"\n{'By Pair Type':^{w}}")
     print("-" * w)
     for ptype, data in metrics["by_pair_type"].items():
         print(f"  {ptype}:")
         print(f"    Count: {data['total']}   "
-              f"Avg score: {data['avg_score']:.4f}   "
+              f"Avg: {data['avg_score']:.4f}   "
               f"Std: {data['std_score']:.4f}   "
               f"Range: [{data['min_score']:.4f}, {data['max_score']:.4f}]")
-        print(f"    Decisions: {data['decisions']}   LLM calls: {data['llm_calls']}")
+        print(f"    Decisions: {data['decisions']}   Borderline: {data['borderline_count']}")
 
     ca = metrics.get("counterfeit_analysis") or {}
     if ca:
-        print(f"\n{'Counterfeit (diff brand, same category)':^{w}}")
+        print(f"\n{'Counterfeit (diff brand, same cat)':^{w}}")
         print("-" * w)
-        print(f"  Pairs: {ca['total']}   Avg score: {ca['avg_score']:.4f}   "
+        print(f"  Pairs: {ca['total']}   Avg: {ca['avg_score']:.4f}   "
               f"Range: [{ca['min_score']:.4f}, {ca['max_score']:.4f}]")
-        print(f"  Decisions: {ca['decisions']}")
-
-    sa = metrics.get("same_brand_analysis") or {}
-    if sa:
-        print(f"\n{'Same Brand (same category)':^{w}}")
-        print("-" * w)
-        print(f"  Pairs: {sa['total']}   Avg score: {sa['avg_score']:.4f}   "
-              f"Range: [{sa['min_score']:.4f}, {sa['max_score']:.4f}]")
-        print(f"  Decisions: {sa['decisions']}")
+        print(f"  Decisions: {ca['decisions']}   Borderline: {ca['borderline_count']}")
 
     print(f"\n{'Threshold Sweep':^{w}}")
     print("-" * w)
@@ -552,27 +763,25 @@ def print_summary(metrics: dict) -> None:
         print(f"  {pt['threshold']:>7.2f} {pt['accuracy']:>9.2%} {pt['precision']:>9.2%} "
               f"{pt['recall']:>9.2%} {pt['fpr']:>9.2%}{tag}")
 
-    print(f"\n{'Hard Cases':^{w}}")
-    print("-" * w)
-    for hc in metrics.get("hard_cases", []):
-        print(f"  [{hc['kind']}] {hc['catalog_id']} vs {hc['return_id']}  "
-              f"score={hc['score']:.4f} -> {hc['decision']}")
-
-    if metrics.get("false_positives"):
-        print(f"\n{'False Positives (top 10)':^{w}}")
+    # ── Gemma results summary ────────────────────────────────
+    if gemma_results:
+        changed = [r for r in gemma_results if r["decision_changed"]]
+        print(f"\n{'Phase D: Gemma Borderline Analysis':^{w}}")
         print("-" * w)
-        for fp in metrics["false_positives"][:10]:
-            print(f"  {fp['catalog_id']} vs {fp['return_id']}  "
-                  f"score={fp['score']:.4f}  ({fp['pair_type']})")
+        print(f"  Borderline cases:     {len(gemma_results)}")
+        print(f"  Decisions changed:    {len(changed)}")
+        avg_lat = np.mean([r["gemma_latency_ms"] for r in gemma_results])
+        print(f"  Avg Gemma latency:    {avg_lat:.0f}ms")
+        print()
+        for gr in gemma_results:
+            chg = " **CHANGED**" if gr["decision_changed"] else ""
+            print(f"  {gr['catalog_id']} vs {gr['return_id']}")
+            print(f"    score={gr['score']:.4f}  threshold={gr['product_threshold']:.4f}  "
+                  f"{gr['decision_before_llm']} -> {gr['decision_after_llm']}{chg}")
+            print(f"    Gemma: {gr['gemma_verdict']} — {gr['gemma_explanation'][:80]}")
+            print()
 
-    if metrics.get("false_negatives"):
-        print(f"\n{'False Negatives (top 10)':^{w}}")
-        print("-" * w)
-        for fn in metrics["false_negatives"][:10]:
-            print(f"  {fn['catalog_id']} vs {fn['return_id']}  "
-                  f"score={fn['score']:.4f}  ({fn['pair_type']})")
-
-    print("\n" + "=" * w)
+    print("=" * w)
 
 
 # ================================================================
@@ -622,23 +831,46 @@ def main() -> None:
     # ── Phase C ──────────────────────────────────────────────
     logger.info("Phase C: Computing metrics...")
     metrics = compute_metrics(results)
-    print_summary(metrics)
 
-    # ── Save ─────────────────────────────────────────────────
+    borderline = [r for r in results if r["is_borderline"]]
+    logger.info("Identified %d borderline cases", len(borderline))
+
+    # ── Phase D: Real Gemma calls ────────────────────────────
+    gemma_results: list[dict] = []
+    if borderline:
+        logger.info("Phase D: Running real Gemma on %d borderline cases...", len(borderline))
+        gemma_results = asyncio.run(run_gemma_on_borderline(borderline, encoded))
+        t_gemma = time.perf_counter()
+        logger.info("Phase D done (%.1fs)", t_gemma - t_eval)
+    else:
+        logger.info("Phase D: No borderline cases — skipping Gemma calls.")
+
+    # ── Print + save ─────────────────────────────────────────
+    print_summary(metrics, gemma_results)
+
+    # Save pair-by-pair results
     results_path = OUTPUT_DIR / "eval_results.json"
-    summary_path = OUTPUT_DIR / "eval_summary.json"
-
     with open(results_path, "w") as f:
         json.dump(results, f, indent=2, default=str)
 
+    # Save summary metrics
+    summary_path = OUTPUT_DIR / "eval_summary.json"
+    summary = {**metrics, "gemma_borderline": gemma_results}
     with open(summary_path, "w") as f:
-        json.dump(metrics, f, indent=2, default=str)
+        json.dump(summary, f, indent=2, default=str)
+
+    # Save structured markdown report
+    report = generate_report(metrics, gemma_results, results)
+    report_path = OUTPUT_DIR / "eval_report.md"
+    with open(report_path, "w") as f:
+        f.write(report)
 
     t_total = time.perf_counter() - t_start
     logger.info("Total: %.1fs", t_total)
     print(f"\nResults saved to {OUTPUT_DIR}/")
     print(f"  eval_results.json  ({len(results)} pairs)")
-    print(f"  eval_summary.json  (aggregated metrics)")
+    print(f"  eval_summary.json  (metrics + Gemma results)")
+    print(f"  eval_report.md     (structured report)")
 
 
 if __name__ == "__main__":
