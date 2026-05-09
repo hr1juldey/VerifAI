@@ -15,6 +15,7 @@ from app.application.ports import (
     SpatialDiffPort,
 )
 from app.application.use_cases.explain_rejection import ExplainRejectionUseCase
+from app.application.use_cases.verify_helpers import make_error_result, to_numpy
 from app.domain.entities import VerificationResult
 from app.domain.value_objects import ImageData
 
@@ -47,7 +48,7 @@ class VerifyReturnUseCase:
         t0 = time.perf_counter()
         catalog_emb = self._store.get(product_id)
         if catalog_emb is None:
-            return _error_result(product_id)
+            return make_error_result(product_id)
 
         return_emb, return_tokens = self._encoder.encode_image(
             return_image,
@@ -102,28 +103,10 @@ class VerifyReturnUseCase:
             tempfile.NamedTemporaryFile(suffix=".png") as cat_f,
             tempfile.NamedTemporaryFile(suffix=".png") as ret_f,
         ):
-            cv2.imwrite(cat_f.name, _to_numpy(catalog_img))
-            cv2.imwrite(ret_f.name, _to_numpy(annotated))
+            cv2.imwrite(cat_f.name, to_numpy(catalog_img))
+            cv2.imwrite(ret_f.name, to_numpy(annotated))
             return await self._explain.execute(
                 cat_f.name,
                 ret_f.name,
                 product_id,
             )
-
-
-def _error_result(product_id: str) -> VerificationResult:
-    return VerificationResult(
-        decision="ERROR",
-        confidence=0.0,
-        product_id=product_id,
-        latency_ms=0,
-        explanation=f"Product {product_id} not registered",
-    )
-
-
-def _to_numpy(image: ImageData):
-    import numpy as np
-
-    if isinstance(image, np.ndarray):
-        return image
-    return np.array(image)
