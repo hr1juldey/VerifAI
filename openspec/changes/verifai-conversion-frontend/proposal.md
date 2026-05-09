@@ -9,7 +9,7 @@ VerifAI has a working backend (I-JEPA encoder, spatial diff, Gemma explanation) 
 - Create a demo page (`/demo`) as the #1 priority — live verification with animated heatmap bloom, typewriter AI explanation, sound design, and hidden director mode for clean video recording
 - Implement "Warehouse Dark" design system optimized for camera recording (near-black background makes colors pop on compressed video)
 - Support all 5 responsive breakpoints: 375px (mobile sharing), 768px (tablet), 1024px (laptop), 1440px (desktop), 1920px (demo recording)
-- Include waitlist capture via Tally.so or Google Form embed
+- Waitlist/CTA capture mechanism to be decided later (placeholder for now)
 - Defer dashboard (`/dashboard`) and ROI calculator (`/roi`) pages to a later change
 - No backend changes — consume existing `/catalog`, `/verify`, `/health` endpoints
 

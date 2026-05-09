@@ -21,7 +21,7 @@ Fixture images are available at `data/fixtures/{category}/{category}_{000-009}.j
 - Real-time WebSocket updates (verification is request-response)
 - Dashboard or ROI calculator (deferred to later change)
 - Offline mode or PWA
-- Custom backend for waitlist (use Tally.so/Google Form)
+- Custom backend for waitlist (deferred)
 - Mobile-native app
 
 ## Decisions
@@ -65,9 +65,9 @@ Body: Inter 16px/400-500/1.6; Data: JetBrains Mono for scores/API values
 **Choice**: The `/` route is a pure Astro page with zero client-side JS except the looping verification preview (React island).
 **Rationale**: Landing page must load instantly for first impression. Static HTML with CSS animations for the preview loop. Only the preview component hydrates as a React island.
 
-### 8. Waitlist via Tally.so Embed
-**Choice**: Embed Tally.so popup or inline form for waitlist capture.
-**Rationale**: Zero backend work. Tally provides name, email, company type fields out of the box. Can be replaced later with a custom form if volume justifies it.
+### 8. Waitlist/CTA (Deferred)
+**Choice**: Placeholder — waitlist capture mechanism to be decided later.
+**Rationale**: Do not block on third-party form provider selection. Build a simple "Get early access" button that navigates to a placeholder route or shows a coming-soon state. Replace with actual form (Calendly, WhatsApp, custom) once decided.
 
 ### 9. Monorepo Structure — `frontend/` at Project Root
 **Choice**: `frontend/` directory, Astro build outputs to `frontend/dist/`.

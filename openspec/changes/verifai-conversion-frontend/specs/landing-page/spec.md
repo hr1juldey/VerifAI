@@ -54,12 +54,12 @@ The landing page SHALL provide a "Talk to founder" call-to-action.
 - **WHEN** user clicks "Talk to founder"
 - **THEN** the system SHALL open a Calendly link or WhatsApp chat
 
-### Requirement: Waitlist form
-The landing page SHALL capture waitlist signups with name, email, and company type.
+### Requirement: Waitlist placeholder
+The landing page SHALL display a "Get early access" CTA that shows a coming-soon state (actual form TBD).
 
-#### Scenario: Waitlist form submission
-- **WHEN** user fills name, email, and company type and submits
-- **THEN** the system SHALL record the entry via Tally.so or Google Form embed and display a confirmation message
+#### Scenario: Waitlist CTA
+- **WHEN** user clicks "Get early access"
+- **THEN** the system SHALL show a "Coming soon" message or navigate to a placeholder route (actual waitlist integration deferred)
 
 ### Requirement: Responsive landing page
 The landing page SHALL render correctly at all 5 breakpoints.

@@ -29,7 +29,7 @@
 - [ ] 4.3 Build stats bar: "10 images to deploy · 1.8s latency · 98.6% accuracy"
 - [ ] 4.4 Build pain section: "₹1,000+ Crore lost to return fraud annually" with supporting context
 - [ ] 4.5 Build tech cred section: "Built with I-JEPA · ViT-H/14 · 632M parameters"
-- [ ] 4.6 Add Tally.so waitlist form embed (name, email, company type)
+- [ ] 4.6 Add "Get early access" CTA button with placeholder coming-soon state (waitlist provider TBD)
 - [ ] 4.7 Add "Talk to founder" CTA (Calendly or WhatsApp link)
 - [ ] 4.8 Implement responsive hero: 72px headline at 1920px, 28px at 375px, stacked CTAs on mobile
 
