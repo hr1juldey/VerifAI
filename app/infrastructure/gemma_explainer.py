@@ -21,6 +21,9 @@ class ExplainRejection(dspy.Signature):
     product_description: str = dspy.InputField(
         desc="Product name and details for context",
     )
+    verdict: str = dspy.OutputField(
+        desc="One of: LIGHTING_ARTIFACT or CONTENT_DIFF",
+    )
     explanation: str = dspy.OutputField(
         desc="Factual description of red-highlighted regions only. "
         "No preamble. 1-3 sentences.",
@@ -52,14 +55,16 @@ class GemmaExplainer(ExplainerPort):
         catalog_image_path: str,
         annotated_return_path: str,
         product_description: str,
-    ) -> str:
+    ) -> tuple[str, str]:
         result = self._predictor(
             catalog_image=DspyImage(url=catalog_image_path),
             return_image=DspyImage(url=annotated_return_path),
             product_description=product_description,
         )
-        raw = result.explanation
-        return _clean(raw)
+        verdict = result.verdict.strip().upper()
+        if verdict not in ("LIGHTING_ARTIFACT", "CONTENT_DIFF"):
+            verdict = "CONTENT_DIFF"
+        return verdict, _clean(result.explanation)
 
 
 def _clean(text: str) -> str:

@@ -38,4 +38,5 @@ async def verify_return(
     async with _semaphore:
         result = await use_case.execute(product_id, pil_image, catalog_image)
 
-    return VerifyResponse(**result.model_dump())
+    resp = VerifyResponse(**result.model_dump())
+    return resp

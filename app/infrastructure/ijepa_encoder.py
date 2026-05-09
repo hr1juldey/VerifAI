@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import logging
 
+import cv2
+import numpy as np
 import torch
 from transformers import pipeline
 
@@ -9,6 +11,23 @@ from app.application.ports import EncoderPort
 from app.domain.value_objects import ImageData
 
 logger = logging.getLogger(__name__)
+
+
+def normalize_clahe(image: ImageData) -> np.ndarray:
+    if not isinstance(image, np.ndarray):
+        image = np.array(image)
+    if image.dtype != np.uint8:
+        image = (image * 255).clip(0, 255).astype(np.uint8)
+    if len(image.shape) == 2:
+        image = cv2.cvtColor(image, cv2.COLOR_GRAY2BGR)
+    if image.shape[2] == 4:
+        image = cv2.cvtColor(image, cv2.COLOR_BGRA2BGR)
+    lab = cv2.cvtColor(image, cv2.COLOR_BGR2LAB)
+    l_ch, a_ch, b_ch = cv2.split(lab)
+    clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
+    l_ch = clahe.apply(l_ch)
+    lab = cv2.merge([l_ch, a_ch, b_ch])
+    return cv2.cvtColor(lab, cv2.COLOR_LAB2BGR)
 
 
 class IjepaEncoder(EncoderPort):
@@ -59,9 +78,28 @@ class IjepaEncoder(EncoderPort):
         images: list[ImageData],
         return_tokens: bool = False,
     ) -> torch.Tensor | tuple[torch.Tensor, torch.Tensor]:
-        results = [self.encode_image(img, return_tokens) for img in images]
+        from PIL import Image as PILImage
+
+        import numpy as np
+
+        pil_images = []
+        for img in images:
+            if isinstance(img, np.ndarray):
+                img = PILImage.fromarray(img)
+            pil_images.append(img)
+
+        inputs = self._processor(pil_images, return_tensors="pt", padding=True)
+        inputs = {k: v.to(self._device) for k, v in inputs.items()}
+        with torch.no_grad():
+            outputs = self._model(**inputs)
+        hidden = outputs.last_hidden_state
+        if self._device == "cuda":
+            hidden = hidden.float()
+
+        batch_size = hidden.shape[0]
+        tokens_all = hidden.reshape(batch_size, -1, hidden.shape[-1])
+        pooled_all = tokens_all.mean(dim=1)
+
         if return_tokens:
-            pooled = torch.stack([r[0] for r in results])
-            tokens = torch.stack([r[1] for r in results])
-            return pooled, tokens
-        return torch.stack(results)
+            return pooled_all.cpu(), tokens_all.cpu()
+        return pooled_all.cpu()

@@ -28,11 +28,24 @@ class SpatialDiff(SpatialDiffPort):
         self,
         tokens_a: torch.Tensor,
         tokens_b: torch.Tensor,
+        regional_threshold: float | None = None,
     ) -> SpatialDiffMap:
         sims = cosine_similarity(tokens_a, tokens_b, dim=-1)
         diff_scores = 1.0 - sims.numpy()
         heatmap = diff_scores.reshape(HEATMAP_GRID, HEATMAP_GRID)
         return SpatialDiffMap(heatmap=heatmap, annotated_image=np.array([]))
+
+    def compute_regional_stats(
+        self,
+        tokens_a: torch.Tensor,
+        tokens_b: torch.Tensor,
+        regional_threshold: float,
+    ) -> tuple[SpatialDiffMap, int, int]:
+        diff_map = self.compute_diff(tokens_a, tokens_b)
+        flagged = diff_map.heatmap > regional_threshold
+        flagged_count = int(flagged.sum())
+        contiguous_regions = _count_contiguous(flagged)
+        return diff_map, flagged_count, contiguous_regions
 
     def render_overlay(
         self,
@@ -97,3 +110,37 @@ def _to_bgr_uint8(image: ImageData) -> np.ndarray:
     if image.shape[2] == 4:
         image = cv2.cvtColor(image, cv2.COLOR_BGRA2BGR)
     return image
+
+
+def compute_patch_deltas(
+    raw_tokens: torch.Tensor,
+    norm_tokens: torch.Tensor,
+    catalog_tokens: torch.Tensor,
+) -> np.ndarray:
+    raw_sims = cosine_similarity(raw_tokens, catalog_tokens, dim=-1)
+    norm_sims = cosine_similarity(norm_tokens, catalog_tokens, dim=-1)
+    deltas = (norm_sims - raw_sims).numpy()
+    return deltas.reshape(HEATMAP_GRID, HEATMAP_GRID)
+
+
+def _count_contiguous(flagged: np.ndarray) -> int:
+    visited = np.zeros_like(flagged, dtype=bool)
+    regions = 0
+    for i in range(flagged.shape[0]):
+        for j in range(flagged.shape[1]):
+            if flagged[i, j] and not visited[i, j]:
+                _flood_fill(flagged, visited, i, j)
+                regions += 1
+    return regions
+
+
+def _flood_fill(grid: np.ndarray, visited: np.ndarray, i: int, j: int) -> None:
+    stack = [(i, j)]
+    while stack:
+        ci, cj = stack.pop()
+        if ci < 0 or ci >= grid.shape[0] or cj < 0 or cj >= grid.shape[1]:
+            continue
+        if visited[ci, cj] or not grid[ci, cj]:
+            continue
+        visited[ci, cj] = True
+        stack.extend([(ci - 1, cj), (ci + 1, cj), (ci, cj - 1), (ci, cj + 1)])

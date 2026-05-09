@@ -14,7 +14,7 @@ from app.infrastructure.ijepa_encoder import IjepaEncoder
 from app.infrastructure.spatial_diff import SpatialDiff
 from app.application.use_cases.ingest_catalog import IngestCatalogUseCase
 from app.application.use_cases.verify_return import VerifyReturnUseCase
-from app.presentation.routes import catalog, health, verify
+from app.presentation.routes import calibrate, catalog, health, verify
 
 load_dotenv()
 
@@ -79,6 +79,7 @@ def create_app() -> FastAPI:
     app.include_router(health.router)
     app.include_router(catalog.router)
     app.include_router(verify.router)
+    app.include_router(calibrate.router)
     return app
 
 
