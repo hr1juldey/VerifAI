@@ -41,11 +41,11 @@
 - [x] 7.2 Add `verifai.log` to `.gitignore`
 - [x] 7.3 Add `LOG_CONFIG_PATH` to `.env.example`
 - [x] 7.4 Create `scripts/dev.sh` — create tmux session `verifai` with pane 0 (uvicorn --reload --reload-dir app/ --log-config log_config.json) and pane 1 (bash shell)
-- [ ] 7.5 Verify dev server starts: run `scripts/dev.sh`, check tmux session has 2 panes, uvicorn shows "Application startup complete", kill session
+- [x] 7.5 Verify dev server starts: run `scripts/dev.sh`, check tmux session has 2 panes, uvicorn shows "Application startup complete", kill session
 
 ## 8. Final Validation
 
 - [x] 8.1 Run `uv run pytest -m "not gpu"` — verify all unit tests pass without GPU
 - [x] 8.2 Run `uv run pytest -m gpu` — verify all GPU integration tests pass
-- [ ] 8.3 Run `uv run pytest` — verify all tests pass together
+- [x] 8.3 Run `uv run pytest` — verify all tests pass together
 - [x] 8.4 Run `ruff check --fix` and `ruff format` on all modified files
