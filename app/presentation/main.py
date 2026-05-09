@@ -7,6 +7,7 @@ from contextlib import asynccontextmanager
 from dotenv import load_dotenv
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 
 from app.infrastructure.embedding_store import EmbeddingStore
 from app.infrastructure.gemma_explainer import GemmaExplainer
@@ -80,6 +81,12 @@ def create_app() -> FastAPI:
     app.include_router(catalog.router)
     app.include_router(verify.router)
     app.include_router(calibrate.router)
+
+    # Serve frontend static files in production
+    frontend_dist = os.environ.get("FRONTEND_DIST", "frontend/dist")
+    if os.path.isdir(frontend_dist):
+        app.mount("/", StaticFiles(directory=frontend_dist, html=True), name="frontend")
+
     return app
 
 
