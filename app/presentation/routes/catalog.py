@@ -22,4 +22,5 @@ async def catalog_product(
     pil_image = Image.open(image.file).convert("RGB")
     use_case = request.app.state.ingest_catalog_use_case
     result = await use_case.execute(product_id, pil_image)
+    request.app.state.catalog_images[product_id] = pil_image
     return CatalogResponse(**result)
