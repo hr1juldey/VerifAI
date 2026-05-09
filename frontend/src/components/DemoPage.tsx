@@ -126,6 +126,8 @@ export default function DemoPage() {
     setResult(null);
     setError(null);
     setProductId(preset.productId);
+    setCatalogPreviewUrl(preset.catalogFile);
+    setReturnPreviewUrl(preset.returnFile);
 
     try {
       const [catResp, retResp] = await Promise.all([
@@ -186,8 +188,9 @@ export default function DemoPage() {
           <ImageUpload
             label="Catalog Image"
             onFileSelect={setCatalogFile}
-            onFileClear={() => setCatalogFile(null)}
+            onFileClear={() => { setCatalogFile(null); setCatalogPreviewUrl(null); }}
             file={catalogFile}
+            previewUrl={catalogPreviewUrl}
           />
         </div>
 
@@ -197,8 +200,9 @@ export default function DemoPage() {
           <ImageUpload
             label="Return Image"
             onFileSelect={setReturnFile}
-            onFileClear={() => setReturnFile(null)}
+            onFileClear={() => { setReturnFile(null); setReturnPreviewUrl(null); }}
             file={returnFile}
+            previewUrl={returnPreviewUrl}
           />
         </div>
       </div>
