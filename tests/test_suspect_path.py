@@ -18,19 +18,26 @@ from app.infrastructure.spatial_diff import SpatialDiff
 def test_compute_baseline(random_image):
     from app.application.use_cases.verify_helpers import compute_baseline
 
-    catalog_emb = np.random.randn(1024).astype(np.float32)
+    catalog_emb = np.ones(1024, dtype=np.float32)
+    catalog_emb /= np.linalg.norm(catalog_emb)
+    catalog_t = torch.from_numpy(catalog_emb)
+
+    # 5 embeddings ~0.85 cosine sim to catalog
+    fake_batch = torch.stack(
+        [catalog_t * 0.85 + torch.randn(1024) * 0.1 for _ in range(5)]
+    )
+
     encoder = MagicMock()
-    fake_batch = torch.randn(5, 1024)
     encoder.encode_batch.return_value = fake_batch
 
     baseline = compute_baseline(encoder, catalog_emb, random_image)
 
     assert isinstance(baseline, ProductBaseline)
-    assert 0.0 <= baseline.mean <= 1.0
+    assert 0.5 <= baseline.mean <= 1.0
     assert baseline.std >= 0.0
     assert baseline.min <= baseline.mean
-    assert baseline.threshold == baseline.mean - 2 * baseline.std
-    assert baseline.regional_threshold == baseline.min - 0.05
+    assert baseline.threshold == pytest.approx(baseline.mean - 2 * baseline.std, abs=1e-6)
+    assert baseline.regional_threshold == pytest.approx(baseline.min - 0.05, abs=1e-6)
     assert baseline.delta_threshold == 0.15
     encoder.encode_batch.assert_called_once()
 
@@ -112,18 +119,23 @@ async def test_lighting_artifact_resolution():
         "std": 0.04,
         "min": 0.82,
         "threshold": 0.60,
-        "regional_threshold": 0.25,
+        "regional_threshold": 0.10,
         "delta_threshold": 0.15,
     }
 
-    return_emb = catalog_emb * 0.98 + torch.randn(1024) * 0.01
-    catalog_tokens = torch.randn(256, 1024)
-    return_tokens = catalog_tokens.clone()
-    # Create regional differences
-    for idx in [70, 71, 72]:
-        return_tokens[idx] = torch.randn(1024)
+    return_emb = catalog_emb * 0.98
 
-    # CLAHE norm_tokens much closer to catalog at flagged patches
+    # Catalog tokens: unit vectors for clean baseline
+    catalog_tokens = torch.randn(256, 1024)
+    catalog_tokens = catalog_tokens / catalog_tokens.norm(dim=-1, keepdim=True)
+
+    # Return tokens: mostly same, but 3 contiguous patches are very different
+    return_tokens = catalog_tokens.clone()
+    for idx in [70, 71, 72]:  # row 4, cols 6-8
+        return_tokens[idx] = torch.randn(1024)
+        return_tokens[idx] = return_tokens[idx] / return_tokens[idx].norm()
+
+    # CLAHE norm_tokens: back to catalog (lighting fixed)
     norm_tokens = catalog_tokens.clone()
 
     encoder.encode_image.side_effect = [
