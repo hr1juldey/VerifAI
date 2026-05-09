@@ -8,5 +8,11 @@ wheels/
 
 # Virtual environments
 .venv
-.env 
+.env
 pytest-of-riju279
+
+# Log files
+verifai.log
+
+# Test fixture images (downloaded, not committed)
+tests/fixtures/images/

@@ -88,7 +88,7 @@ class IjepaEncoder(EncoderPort):
                 img = PILImage.fromarray(img)
             pil_images.append(img)
 
-        inputs = self._processor(pil_images, return_tensors="pt", padding=True)
+        inputs = self._processor(pil_images, return_tensors="pt")
         inputs = {k: v.to(self._device) for k, v in inputs.items()}
         with torch.no_grad():
             outputs = self._model(**inputs)

@@ -18,13 +18,13 @@ from app.infrastructure.spatial_diff import SpatialDiff
 def test_compute_baseline(random_image):
     from app.application.use_cases.verify_helpers import compute_baseline
 
-    catalog_emb = np.ones(1024, dtype=np.float32)
+    catalog_emb = np.ones(1280, dtype=np.float32)
     catalog_emb /= np.linalg.norm(catalog_emb)
     catalog_t = torch.from_numpy(catalog_emb)
 
-    # 5 embeddings ~0.85 cosine sim to catalog
+    # 5 embeddings with high cosine sim to catalog (small noise)
     fake_batch = torch.stack(
-        [catalog_t * 0.85 + torch.randn(1024) * 0.1 for _ in range(5)]
+        [catalog_t * 0.9 + torch.randn(1280) * 0.01 for _ in range(5)]
     )
 
     encoder = MagicMock()
@@ -36,7 +36,9 @@ def test_compute_baseline(random_image):
     assert 0.5 <= baseline.mean <= 1.0
     assert baseline.std >= 0.0
     assert baseline.min <= baseline.mean
-    assert baseline.threshold == pytest.approx(baseline.mean - 2 * baseline.std, abs=1e-6)
+    assert baseline.threshold == pytest.approx(
+        baseline.mean - 2 * baseline.std, abs=1e-6
+    )
     assert baseline.regional_threshold == pytest.approx(baseline.min - 0.05, abs=1e-6)
     assert baseline.delta_threshold == 0.15
     encoder.encode_batch.assert_called_once()
@@ -55,7 +57,7 @@ async def test_suspect_decision_path():
     explainer = AsyncMock()
 
     # Setup: catalog embedding exists with baseline
-    catalog_emb = torch.randn(1024)
+    catalog_emb = torch.randn(1280)
     store.get.return_value = catalog_emb
     store.get_baseline.return_value = {
         "mean": 0.9,
@@ -67,24 +69,24 @@ async def test_suspect_decision_path():
     }
 
     # Return embedding close to catalog (passes global threshold)
-    return_emb = catalog_emb + torch.randn(1024) * 0.05
+    return_emb = catalog_emb + torch.randn(1280) * 0.05
     return_emb = return_emb / return_emb.norm() * catalog_emb.norm()
 
     # Tokens: catalog vs return with regional differences
-    catalog_tokens = torch.randn(256, 1024)
+    catalog_tokens = torch.randn(256, 1280)
     return_tokens = catalog_tokens.clone()
     # Make 3 contiguous patches very different (rows 4, cols 6-8)
-    return_tokens[4 * 16 + 6] = torch.randn(1024) * 3
-    return_tokens[4 * 16 + 7] = torch.randn(1024) * 3
-    return_tokens[4 * 16 + 8] = torch.randn(1024) * 3
+    return_tokens[4 * 16 + 6] = torch.randn(1280) * 3
+    return_tokens[4 * 16 + 7] = torch.randn(1280) * 3
+    return_tokens[4 * 16 + 8] = torch.randn(1280) * 3
 
     # norm_tokens: same as return_tokens (no improvement → CONTENT_DIFF)
     norm_tokens = return_tokens.clone()
 
     encoder.encode_image.side_effect = [
         (return_emb, return_tokens),  # return image
-        (torch.randn(1024), catalog_tokens),  # catalog image
-        (torch.randn(1024), norm_tokens),  # CLAHE re-encode
+        (torch.randn(1280), catalog_tokens),  # catalog image
+        (torch.randn(1280), norm_tokens),  # CLAHE re-encode
     ]
 
     explainer.explain.return_value = ("CONTENT_DIFF", "Different logo proportions")
@@ -111,7 +113,7 @@ async def test_lighting_artifact_resolution():
     spatial = SpatialDiff()
     explainer = AsyncMock()
 
-    catalog_emb = torch.ones(1024)
+    catalog_emb = torch.ones(1280)
     catalog_emb = catalog_emb / catalog_emb.norm()
     store.get.return_value = catalog_emb
     store.get_baseline.return_value = {
@@ -126,13 +128,18 @@ async def test_lighting_artifact_resolution():
     return_emb = catalog_emb * 0.98
 
     # Catalog tokens: unit vectors for clean baseline
-    catalog_tokens = torch.randn(256, 1024)
+    catalog_tokens = torch.randn(256, 1280)
     catalog_tokens = catalog_tokens / catalog_tokens.norm(dim=-1, keepdim=True)
 
-    # Return tokens: mostly same, but 3 contiguous patches are very different
+    # Return tokens: mostly same, but two separate regions of 3 patches differ
     return_tokens = catalog_tokens.clone()
-    for idx in [70, 71, 72]:  # row 4, cols 6-8
-        return_tokens[idx] = torch.randn(1024)
+    # Region 1: row 4, cols 6-8 (indices 70, 71, 72)
+    for idx in [70, 71, 72]:
+        return_tokens[idx] = torch.randn(1280)
+        return_tokens[idx] = return_tokens[idx] / return_tokens[idx].norm()
+    # Region 2: row 8, cols 2-4 (indices 130, 131, 132)
+    for idx in [130, 131, 132]:
+        return_tokens[idx] = torch.randn(1280)
         return_tokens[idx] = return_tokens[idx] / return_tokens[idx].norm()
 
     # CLAHE norm_tokens: back to catalog (lighting fixed)
@@ -140,8 +147,8 @@ async def test_lighting_artifact_resolution():
 
     encoder.encode_image.side_effect = [
         (return_emb, return_tokens),
-        (torch.randn(1024), catalog_tokens),
-        (torch.randn(1024), norm_tokens),
+        (torch.randn(1280), catalog_tokens),
+        (torch.randn(1280), norm_tokens),
     ]
 
     uc = VerifyReturnUseCase(encoder, store, spatial, explainer, threshold=0.7)
@@ -158,7 +165,7 @@ async def test_lighting_artifact_resolution():
 def test_legacy_store_compatibility(tmp_path):
     path = tmp_path / "legacy.pt"
     # Old format: dict[str, Tensor]
-    old_data = {"SKU-001": torch.randn(1024), "SKU-002": torch.randn(1024)}
+    old_data = {"SKU-001": torch.randn(1280), "SKU-002": torch.randn(1280)}
     torch.save(old_data, path)
 
     store = EmbeddingStore(persist_path=str(path))
@@ -186,7 +193,7 @@ def test_migrate_legacy():
 def test_new_format_round_trip(tmp_path):
     path = tmp_path / "new.pt"
     store = EmbeddingStore(persist_path=str(path))
-    emb = torch.randn(1024)
+    emb = torch.randn(1280)
     store.put("SKU-001", emb)
     baseline = ProductBaseline(
         mean=0.88,

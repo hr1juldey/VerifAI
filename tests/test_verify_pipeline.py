@@ -13,11 +13,11 @@ async def test_catalog_ingestion(store, random_image, random_embedding):
 
     encoder = MagicMock()
     encoder.encode_image.return_value = random_embedding
-    encoder.encode_batch.return_value = torch.randn(5, 1024)
+    encoder.encode_batch.return_value = torch.randn(5, 1280)
     uc = IngestCatalogUseCase(encoder, store)
     result = await uc.execute("prod-001", random_image)
     assert result["product_id"] == "prod-001"
-    assert result["embedding_dims"] == 1024
+    assert result["embedding_dims"] == 1280
     assert store.get("prod-001") is not None
 
 
@@ -27,10 +27,10 @@ async def test_catalog_reingestion_replaces(store, random_image, random_embeddin
 
     encoder = MagicMock()
     encoder.encode_image.return_value = random_embedding
-    encoder.encode_batch.return_value = torch.randn(5, 1024)
+    encoder.encode_batch.return_value = torch.randn(5, 1280)
     uc = IngestCatalogUseCase(encoder, store)
     await uc.execute("prod-001", random_image)
-    new_emb = torch.randn(1024)
+    new_emb = torch.randn(1280)
     encoder.encode_image.return_value = new_emb
     await uc.execute("prod-001", random_image)
     assert torch.equal(store.get("prod-001"), new_emb)
