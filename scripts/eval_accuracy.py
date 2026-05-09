@@ -227,13 +227,8 @@ def evaluate_pair(
     # ── REJECT path (low similarity) ─────────────────────────
     if score < product_threshold:
         result["decision"] = "REJECT"
-        # Borderline: score is close to threshold (just barely rejected)
-        gap = product_threshold - score
-        if gap < BORDERLINE_MARGIN:
-            result["is_borderline"] = True
-            result["borderline_reason"] = (
-                f"score {score:.4f} is only {gap:.4f} below threshold {product_threshold:.4f}"
-            )
+        # No borderline flag: spatial diff not computed for REJECT,
+        # so there's no overlay for Gemma to analyze.
         return result
 
     # ── Spatial diff check ───────────────────────────────────
