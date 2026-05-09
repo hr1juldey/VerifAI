@@ -19,7 +19,7 @@ Indian D2C e-commerce loses ₹2,400+ crores/year (~$290M+) to return fraud — 
 - `spatial-diff`: Per-token cosine similarity computation, 16x16 heatmap generation, colormap overlay on original image
 - `embedding-cache`: In-memory catalog embedding storage and lookup by product ID, with ingestion endpoint
 - `verification-api`: FastAPI endpoints — POST /verify (main pipeline), POST /catalog (ingest catalog images), GET /health, async GPU concurrency via semaphore
-- `gemma-explainer`: Ollama Gemma 4 integration — constrained prompt construction, anchored image formatting, natural language explanation output
+- `gemma-explainer`: DSPy framework with Ollama `gemma4:e4b` backend — type-safe signature with `dspy.Image` inputs, retry logic, natural language explanation output
 
 ### Modified Capabilities
 
@@ -28,7 +28,7 @@ Indian D2C e-commerce loses ₹2,400+ crores/year (~$290M+) to return fraud — 
 ## Impact
 
 - **New files**: FastAPI application with clean architecture (domain/application/infrastructure/presentation layers)
-- **Dependencies**: All already declared in pyproject.toml (torch, transformers, fastapi, opencv-python, scipy, pillow, uvicorn)
+- **Dependencies**: All already declared in pyproject.toml (torch, transformers, fastapi, opencv-python, scipy, pillow, uvicorn) + DSPy (to be added)
 - **External dependency**: Ollama running locally with Gemma 4 multimodal model pulled
 - **Hardware**: Requires CUDA-capable GPU with 12GB+ VRAM
 - **No breaking changes**: Greenfield project

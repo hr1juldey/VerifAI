@@ -26,7 +26,7 @@ Per-token cosine similarity from `last_hidden_state` (shape [1, 256, 1024]) give
 
 ### D2: Gemma 4 constrained by spatial overlay, not raw comparison
 
-Direct multimodal comparison ("what's different?") risks hallucination. Instead, the spatial diff overlay constrains Gemma 4's attention to flagged regions. The prompt explicitly instructs: "describe only what you see in the red-highlighted regions." Three anchors prevent ambiguity: the original catalog image, the overlay highlighting WHERE the diff is, and the constrained prompt.
+Direct multimodal comparison ("what's different?") risks hallucination. Instead, the spatial diff overlay constrains Gemma 4's attention to flagged regions. The DSPy signature explicitly instructs: "describe only what you see in the red-highlighted regions." Three anchors prevent ambiguity: the original catalog image (via `dspy.Image`), the overlay highlighting WHERE the diff is (via `dspy.Image`), and the constrained DSPy `OutputField`.
 
 ### D3: In-memory embedding cache, no database for MVP
 
@@ -52,7 +52,7 @@ app/
 │   ├── ijepa_encoder.py         # I-JEPA model loading + FP16 inference
 │   ├── spatial_diff.py          # Per-token diff + colormap overlay
 │   ├── embedding_store.py       # In-memory dict + .pt persistence
-│   └── gemma_client.py          # Ollama HTTP client
+│   └── gemma_explainer.py       # DSPy module + Ollama LM backend
 └── presentation/
     ├── main.py                  # FastAPI app factory + lifespan
     ├── routes/
@@ -72,11 +72,15 @@ Layer boundaries enforced per CLAUDE_POLICY.md Rule 1.2:
 
 Model loaded in FastAPI lifespan handler, stored in app.state. FP16 conversion halves VRAM usage (~3GB vs ~6GB). The model stays on GPU for the lifetime of the process — no per-request loading.
 
+### D7: DSPy framework for Gemma 4 explainer
+
+Using DSPy (v3.2.1+) with `ollama_chat/gemma4:e4b` backend instead of direct HTTP calls. DSPy provides: (1) type-safe `dspy.Signature` declaring `dspy.Image` inputs → `str` output, (2) built-in retry logic with exponential backoff (`num_retries=3`), (3) prompt optimization via teleprompter for future A/B testing, (4) native `dspy.Image` primitive for multimodal support. Configuration: `dspy.LM("ollama_chat/gemma4:e4b", api_base="http://localhost:11434", api_key="")`. This is proven pattern from calories-cost-scanner prototype and official DSPy docs.
+
 ## Risks / Trade-offs
 
 - **I-JEPA vs DINOv2**: I-JEPA ViT-H is the largest and slowest option. If latency is too high on RTX 3060, may need to fall back to a smaller variant or DINOv2 ViT-L. Mitigation: benchmark early, design encoder interface as a swappable port.
 - **Per-token diff resolution**: 16x16 is coarse. Each patch covers 14x14 pixels. For small product differences (e.g., serial number mismatch), this may not localize precisely enough. Mitigation: the heatmap is a guide for Gemma 4, not the final evidence — Gemma 4 can interpret the broader region.
-- **Gemma 4 latency via Ollama**: 500ms-2s per explanation. This only fires on ~5% of requests (REJECT), but if Ollama is cold-starting or under load, it could timeout. Mitigation: set a 5-second timeout on the Ollama call, return the spatial diff without explanation on timeout.
+- **Gemma 4 latency via Ollama**: 500ms-2s per explanation. This only fires on ~5% of requests (REJECT), but if Ollama is cold-starting or under load, it could timeout. Mitigation: DSPy's built-in `num_retries=3` with exponential backoff handles transient failures; after all retries exhausted, return "Explanation unavailable (Ollama timeout)" with spatial diff image still included.
 - **VRAM pressure**: I-JEPA ViT-H FP16 (~3GB) + Gemma 4 (loaded separately by Ollama process, not in our VRAM) + OS overhead leaves ~7GB for batching. Comfortable for batch=1-8, tight for batch=16.
 
 ---

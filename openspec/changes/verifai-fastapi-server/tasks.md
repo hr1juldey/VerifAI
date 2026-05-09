@@ -24,14 +24,14 @@
 
 - [ ] 5.1 Create `app/infrastructure/embedding_store.py` — in-memory dict[product_id, tensor], implement `EmbeddingStorePort`; save/load to .pt file; report cache size and memory estimate
 
-## 6. Infrastructure Layer — Gemma 4 Client
+## 6. Infrastructure Layer — Gemma 4 Explainer
 
-- [ ] 6.1 Create `app/infrastructure/gemma_client.py` — async HTTP client for Ollama at localhost:11434, implement `ExplainerPort`; send image + prompt to gemma4 model, 5-second timeout, strip markdown/preamble from response
+- [ ] 6.1 Create `app/infrastructure/gemma_explainer.py` — DSPy module with `ExplainRejection` signature (catalog_image: dspy.Image, return_image: dspy.Image, product_description: str → explanation: str); initialize `dspy.LM("ollama_chat/gemma4:e4b", api_base="http://localhost:11434", api_key="")` at startup using local gemma4:e4b model; implement `ExplainerPort`; strip markdown/preamble from response
 
 ## 7. Presentation Layer — API Routes
 
 - [ ] 7.1 Create `app/presentation/schemas.py` — Pydantic models: VerifyRequest, VerifyResponse, CatalogRequest, CatalogResponse, HealthResponse
-- [ ] 7.2 Create `app/presentation/routes/health.py` — GET /health returning GPU status, model loaded, cache size, Ollama connectivity
+- [ ] 7.2 Create `app/presentation/routes/health.py` — GET /health returning GPU status, I-JEPA model loaded, cache size, DSPy LM provider (ollama_chat/gemma4:e4b) and Ollama connectivity
 - [ ] 7.3 Create `app/presentation/routes/catalog.py` — POST /catalog accepting multipart image + product_id, calling ingest_catalog use case
 - [ ] 7.4 Create `app/presentation/routes/verify.py` — POST /verify accepting multipart image + product_id, calling verify_return use case, async with semaphore(2) for GPU concurrency
 - [ ] 7.5 Create `app/presentation/main.py` — FastAPI app factory, lifespan handler for model + cache loading, include all routers, configure CORS, read VERIFICATION_THRESHOLD from env
@@ -39,6 +39,6 @@
 ## 8. Integration and Smoke Test
 
 - [ ] 8.1 Create `tests/conftest.py` — pytest fixtures for mock encoder, mock store, test images (use random tensors), test client
-- [ ] 8.2 Create `tests/test_verify_pipeline.py` — test MATCH case (high similarity), test REJECT case (low similarity triggers spatial diff + mock explainer), test 404 for unknown product_id
+- [ ] 8.2 Create `tests/test_verify_pipeline.py` — test MATCH case (high similarity), test REJECT case (low similarity triggers spatial diff + DSPy explainer), test 404 for unknown product_id; mock DSPy LM for deterministic testing
 - [ ] 8.3 Create `tests/test_spatial_diff.py` — test per-token cosine computation, test heatmap reshape and upscale, test overlay rendering, test composite generation
 - [ ] 8.4 Run `ruff check --fix` and `ruff format` on all files, verify zero violations
