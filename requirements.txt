@@ -36,3 +36,5 @@ pytest-asyncio>=1.3.0
 
 # Note: uv is a package manager, installed via curl/sh, not pip
 # Visit: https://github.com/astral-sh/uv for installation
+
+kagglehub>=1.0.1
