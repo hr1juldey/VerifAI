@@ -1,20 +1,25 @@
-import { useCallback, useRef, useState, type DragEvent } from 'react';
+import { useCallback, useEffect, useRef, useState, type DragEvent } from 'react';
 
 interface Props {
   label: string;
   onFileSelect: (file: File) => void;
   onFileClear: () => void;
   file?: File | null;
+  /** External preview URL (e.g. from director mode preset fetches) */
+  previewUrl?: string | null;
 }
 
 const ALLOWED = ['image/png', 'image/jpeg', 'image/jpg'];
 const MAX_SIZE = 10 * 1024 * 1024; // 10MB
 
-export default function ImageUpload({ label, onFileSelect, onFileClear, file }: Props) {
+export default function ImageUpload({ label, onFileSelect, onFileClear, file, previewUrl }: Props) {
   const [dragging, setDragging] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [preview, setPreview] = useState<string | null>(null);
+  const [localPreview, setLocalPreview] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+
+  // Use external previewUrl if provided, otherwise local preview
+  const preview = previewUrl || localPreview;
 
   const validate = useCallback((f: File): string | null => {
     if (!ALLOWED.includes(f.type)) return 'Please select an image file (PNG, JPG, JPEG)';
@@ -30,10 +35,11 @@ export default function ImageUpload({ label, onFileSelect, onFileClear, file }: 
         return;
       }
       setError(null);
-      setPreview(URL.createObjectURL(f));
+      if (localPreview) URL.revokeObjectURL(localPreview);
+      setLocalPreview(URL.createObjectURL(f));
       onFileSelect(f);
     },
-    [validate, onFileSelect],
+    [validate, onFileSelect, localPreview],
   );
 
   const onDrop = useCallback(
@@ -46,7 +52,7 @@ export default function ImageUpload({ label, onFileSelect, onFileClear, file }: 
     [handleFile],
   );
 
-  const onDragOver = useCallback((e: DragEvent) => {
+  const onDragOver = useCallback((e: React.DragEvent) => {
     e.preventDefault();
     setDragging(true);
   }, []);
@@ -62,12 +68,12 @@ export default function ImageUpload({ label, onFileSelect, onFileClear, file }: 
   );
 
   const clear = useCallback(() => {
-    if (preview) URL.revokeObjectURL(preview);
-    setPreview(null);
+    if (localPreview) URL.revokeObjectURL(localPreview);
+    setLocalPreview(null);
     setError(null);
     if (inputRef.current) inputRef.current.value = '';
     onFileClear();
-  }, [preview, onFileClear]);
+  }, [localPreview, onFileClear]);
 
   return (
     <div className="flex flex-col gap-2">

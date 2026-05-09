@@ -27,6 +27,8 @@ export default function DemoPage() {
   const [productId, setProductId] = useState('');
   const [catalogFile, setCatalogFile] = useState<File | null>(null);
   const [returnFile, setReturnFile] = useState<File | null>(null);
+  const [catalogPreviewUrl, setCatalogPreviewUrl] = useState<string | null>(null);
+  const [returnPreviewUrl, setReturnPreviewUrl] = useState<string | null>(null);
   const [state, setState] = useState<VerifyState>('idle');
   const [result, setResult] = useState<VerifyResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -83,6 +85,8 @@ export default function DemoPage() {
     if (!productId || !catalogFile || !returnFile) return;
     setResult(null);
     setError(null);
+    setCatalogPreviewUrl(null);
+    setReturnPreviewUrl(null);
     runVerification(productId, catalogFile, returnFile);
   }, [productId, catalogFile, returnFile, runVerification]);
 
