@@ -1,5 +1,6 @@
 ---
 import BaseLayout from '../layouts/Base.astro';
+import HeroVerification from '../components/HeroVerification';
 ---
 <BaseLayout>
   <!-- Hero Section -->
@@ -27,27 +28,9 @@ import BaseLayout from '../layouts/Base.astro';
         </a>
       </div>
 
-      <!-- Live verification preview placeholder -->
+      <!-- Live verification preview -->
       <div class="mt-10 sm:mt-14 mx-auto max-w-2xl">
-        <div class="rounded-xl border border-border bg-surface/50 p-6 sm:p-8">
-          <div class="flex items-center gap-2 mb-4">
-            <span class="w-2 h-2 rounded-full bg-accent animate-pulse"></span>
-            <span class="text-xs font-data text-muted">LIVE VERIFICATION PREVIEW</span>
-          </div>
-          <div class="grid grid-cols-2 gap-4">
-            <div class="rounded-lg bg-bg border border-border h-32 sm:h-40 flex items-center justify-center">
-              <span class="text-xs text-muted">Catalog Image</span>
-            </div>
-            <div class="rounded-lg bg-bg border border-border h-32 sm:h-40 flex items-center justify-center">
-              <span class="text-xs text-muted">Return Image</span>
-            </div>
-          </div>
-          <div class="mt-4 flex items-center justify-center gap-3">
-            <span class="px-3 py-1 rounded-full text-xs font-semibold bg-warning/20 text-warning border border-warning/30">SUSPECT</span>
-            <span class="font-data text-sm text-text">0.58</span>
-            <span class="text-xs text-muted">confidence</span>
-          </div>
-        </div>
+        <HeroVerification client:only="react" />
       </div>
     </div>
   </section>
