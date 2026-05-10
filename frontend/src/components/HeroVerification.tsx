@@ -252,7 +252,7 @@ export default function HeroVerification() {
         {/* Image panels */}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
           {/* Catalog panel */}
-          <div className="relative rounded-lg bg-bg border border-border h-36 sm:h-44 overflow-hidden">
+          <div className="relative rounded-lg bg-bg border border-border overflow-hidden" style={{ aspectRatio: '3/4' }}>
             {phaseIdx < 1 ? (
               <div className="hv-empty-box absolute inset-0 flex items-center justify-center border-2 border-dashed rounded-lg border-border">
                 <span className="text-[10px] sm:text-xs text-muted">Catalog Image</span>
@@ -278,7 +278,7 @@ export default function HeroVerification() {
           </div>
 
           {/* Return / Heatmap panel */}
-          <div className="relative rounded-lg bg-bg border border-border h-36 sm:h-44 overflow-hidden">
+          <div className="relative rounded-lg bg-bg border border-border overflow-hidden" style={{ aspectRatio: '3/4' }}>
             {phaseIdx < 2 ? (
               <div className="hv-empty-box absolute inset-0 flex items-center justify-center border-2 border-dashed rounded-lg border-border">
                 <span className="text-[10px] sm:text-xs text-muted">Return Image</span>
