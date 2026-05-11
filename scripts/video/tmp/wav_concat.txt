@@ -1,0 +1,6 @@
+file 'tmp/seg1_hero.wav'
+file 'tmp/seg2_obstacle.wav'
+file 'tmp/seg3_outcome.wav'
+file 'tmp/seg4_insight.wav'
+file 'tmp/seg5_demo.wav'
+file 'tmp/seg6_close.wav'

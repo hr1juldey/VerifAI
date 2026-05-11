@@ -1,0 +1,6 @@
+file '/home/riju279/Documents/Code/Jepa/VerifAI/scripts/video/segments/audio/seg1_hero.ogg'
+file '/home/riju279/Documents/Code/Jepa/VerifAI/scripts/video/segments/audio/seg2_obstacle.ogg'
+file '/home/riju279/Documents/Code/Jepa/VerifAI/scripts/video/segments/audio/seg3_outcome.ogg'
+file '/home/riju279/Documents/Code/Jepa/VerifAI/scripts/video/segments/audio/seg4_insight.ogg'
+file '/home/riju279/Documents/Code/Jepa/VerifAI/scripts/video/segments/audio/seg5_demo.ogg'
+file '/home/riju279/Documents/Code/Jepa/VerifAI/scripts/video/segments/audio/seg6_close.ogg'
