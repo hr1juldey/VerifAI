@@ -177,6 +177,9 @@ CLOUD LAYER
 
 ## Development Status
 
+### Demo Video
+- 🎬 [3-minute demo](scripts/video/output/verifai-demo-final.mp4)
+
 ### Current State
 - Project scaffolded with `uv` + Python 3.12
 - Basic `main.py` entry point
